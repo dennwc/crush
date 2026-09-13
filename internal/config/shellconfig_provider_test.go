@@ -83,3 +83,71 @@ provider remove dropme`)
 	require.True(t, keep, "keepme should remain")
 	require.False(t, drop, "dropme should be gone after remove")
 }
+
+func TestShellConfigProviderDisable(t *testing.T) {
+	store := loadCrushSh(t, `provider add myllm --type openai-compat --base-url "http://localhost:1234/v1" --api-key sk-test --discover-models false
+model add myllm/m1 --name M1
+provider disable anthropic`)
+
+	cfg := store.Config()
+
+	_, ok := cfg.Providers.Get("myllm")
+	require.True(t, ok, "myllm provider should be configured")
+
+	require.False(t, containsEnabledProvider(cfg, "anthropic"), "anthropic should be disabled")
+	require.True(t, containsEnabledProvider(cfg, "myllm"), "myllm should stay enabled")
+}
+
+// The canonical disable-all-then-enable-one flow: everything in the built-in
+// catalog is disabled, then Hyper is enabled again. Only Hyper survives in
+// the enabled set, so it is the only provider in the model selection list.
+func TestShellConfigProviderDisableAllThenEnableHyper(t *testing.T) {
+	t.Setenv("HYPER_API_KEY", "sk-hyper")
+	store := loadCrushSh(t, `provider disable all
+provider enable hyper`)
+
+	cfg := store.Config()
+
+	require.True(t, containsEnabledProvider(cfg, "hyper"), "hyper should be the only enabled provider")
+	require.False(t, containsEnabledProvider(cfg, "anthropic"), "anthropic should be disabled")
+	require.False(t, containsEnabledProvider(cfg, "openai"), "openai should be disabled")
+
+	hyper, ok := cfg.Providers.Get("hyper")
+	require.True(t, ok, "hyper provider should be configured")
+	require.False(t, hyper.Disable, "hyper should not carry the disable flag")
+}
+
+// The last toggle in the script wins: disabling all after enabling a provider
+// disables it too, and a later enable brings a provider back.
+func TestShellConfigProviderToggleOrderWins(t *testing.T) {
+	store := loadCrushSh(t, `provider add myllm --type openai-compat --base-url "http://localhost:1234/v1" --api-key sk-test --discover-models false
+model add myllm/m1 --name M1
+provider enable anthropic
+provider disable all
+provider enable myllm`)
+
+	cfg := store.Config()
+	require.False(t, containsEnabledProvider(cfg, "anthropic"), "anthropic should be disabled by the later disable all")
+	require.True(t, containsEnabledProvider(cfg, "myllm"), "myllm should be re-enabled after disable all")
+}
+
+func TestShellConfigProviderToggleRequiresArgument(t *testing.T) {
+	for _, verb := range []string{"enable", "disable"} {
+		_, err := loadCrushShErr(t, "provider "+verb)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "usage: provider "+verb)
+	}
+}
+
+// containsEnabledProvider reports whether id is configured and not disabled.
+// Disabled known providers stay in the provider map with the flag set, while
+// disabled custom ones are dropped entirely; either way they must not show up
+// as enabled, which is what the model selection list is built from.
+func containsEnabledProvider(cfg *config.Config, id string) bool {
+	for _, p := range cfg.EnabledProviders() {
+		if p.ID == id {
+			return true
+		}
+	}
+	return false
+}
