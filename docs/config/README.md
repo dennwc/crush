@@ -194,7 +194,10 @@ Usage:
 #### `provider enable` / `provider disable`
 
 Toggle a provider's disable flag without touching its other settings.
-Disabled providers are hidden from the model selection list.
+Disabled providers are hidden from the model selection list. This works
+whether or not the provider is configured: disabling an unconfigured
+built-in provider keeps its entry so it stays hidden even though it has no
+credentials.
 
 ```text
 Usage:

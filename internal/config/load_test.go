@@ -923,6 +923,41 @@ func TestConfig_configureProvidersWithDisabledProvider(t *testing.T) {
 	require.True(t, prov.Disable)
 }
 
+// A known provider disabled without credentials must keep its entry: dropping
+// it would lose the disable flag and the provider would reappear in the model
+// selection list as an unconfigured provider.
+func TestConfig_configureProvidersDisabledKnownProviderWithoutCredentials(t *testing.T) {
+	knownProviders := []catwalk.Provider{
+		{
+			ID:          "openai",
+			APIKey:      "$OPENAI_API_KEY",
+			APIEndpoint: "https://api.openai.com/v1",
+			Models: []catwalk.Model{{
+				ID: "test-model",
+			}},
+		},
+	}
+
+	cfg := &Config{
+		Providers: csync.NewMapFrom(map[string]ProviderConfig{
+			"openai": {
+				Disable: true,
+			},
+		}),
+	}
+	cfg.setDefaults("/tmp", "")
+
+	env := env.NewFromMap(map[string]string{})
+	resolver := NewShellVariableResolver(env)
+	err := cfg.configureProviders(context.Background(), testStore(cfg), env, resolver, knownProviders)
+	require.NoError(t, err)
+
+	prov, exists := cfg.Providers.Get("openai")
+	require.True(t, exists, "disabled provider entry should survive even without credentials")
+	require.True(t, prov.Disable)
+	require.Empty(t, cfg.EnabledProviders(), "disabled provider should not be enabled")
+}
+
 func TestConfig_configureProvidersCustomProviderValidation(t *testing.T) {
 	t.Run("custom provider with missing API key is allowed, but not known providers", func(t *testing.T) {
 		cfg := &Config{

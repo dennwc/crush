@@ -112,6 +112,13 @@ provider enable hyper`)
 	require.False(t, containsEnabledProvider(cfg, "anthropic"), "anthropic should be disabled")
 	require.False(t, containsEnabledProvider(cfg, "openai"), "openai should be disabled")
 
+	// Unconfigured providers keep their disable flag too, so they stay
+	// hidden from the model selection list instead of resurfacing as
+	// unconfigured entries.
+	xai, ok := cfg.Providers.Get("xai")
+	require.True(t, ok, "unconfigured xai should keep its disable flag")
+	require.True(t, xai.Disable)
+
 	hyper, ok := cfg.Providers.Get("hyper")
 	require.True(t, ok, "hyper provider should be configured")
 	require.False(t, hyper.Disable, "hyper should not carry the disable flag")

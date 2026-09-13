@@ -248,6 +248,16 @@ func (c *Config) configureProviders(ctx context.Context, store *ConfigStore, env
 	for _, p := range knownProviders {
 		knownProviderNames[string(p.ID)] = true
 		config, configExists := c.Providers.Get(string(p.ID))
+		// A user-disabled provider keeps its entry untouched so the flag
+		// survives even when the provider has no credentials or models
+		// yet: such unconfigured providers are dropped below and would
+		// otherwise resurface in the model selection list. Everything
+		// downstream filters on Disable. This also intentionally skips
+		// the OAuth cleanup further down; deleting a disabled entry would
+		// re-enable it on the next load.
+		if config.Disable {
+			continue
+		}
 		// if the user configured a known provider we need to allow it to override a couple of parameters
 		if configExists {
 			if config.BaseURL != "" {
