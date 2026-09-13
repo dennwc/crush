@@ -70,6 +70,8 @@ accept `true/false/1/0/yes/no`, case-insensitive.
 ```bash
 provider add <id> [flags]    # define/update; repeated calls merge
 provider remove <id>         # alias: rm — removes the provider and its models
+provider enable <id>|all     # clear the disable flag
+provider disable <id>|all    # set the disable flag; hidden from model selection
 ```
 
 Flags: `--name`, `--type` (`openai`, `openai-compat`, `anthropic`, or a local

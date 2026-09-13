@@ -5,6 +5,10 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"slices"
+
+	"charm.land/catwalk/pkg/embedded"
+	"github.com/charmbracelet/crush/internal/agent/hyper"
 )
 
 // handleProvider implements the `provider` builtin.
@@ -17,16 +21,22 @@ import (
 //	    [--extra-header KEY VALUE] [--extra-body JSON]
 //	    [--provider-options JSON]
 //	provider remove <id>   (alias: rm)
+//	provider enable <id>|all
+//	provider disable <id>|all
 //
 // "add" defines or updates a provider; repeated calls with the same <id>
 // update the same entry. "remove" removes a provider and all its children.
+// "enable" and "disable" toggle the provider's disable flag without touching
+// its other settings; "all" applies to every provider known at that point in
+// the script (the built-in catalog plus anything the script has defined so
+// far). Disabled providers are hidden from the model selection list.
 func handleProvider(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 	b := configBuilderFromCtx(ctx)
 	if b == nil {
 		return nil
 	}
 	if len(args) < 2 {
-		return usage(stderr, "usage: provider add <id> [flags] | provider remove <id>")
+		return usage(stderr, "usage: provider add <id> [flags] | provider remove <id> | provider enable|disable <id>|all")
 	}
 
 	switch args[1] {
@@ -34,8 +44,10 @@ func handleProvider(ctx context.Context, args []string, stdin io.Reader, stdout,
 		return providerAdd(b, args, stderr)
 	case "remove", "rm":
 		return providerRemove(b, args, stderr)
+	case "enable", "disable":
+		return providerToggle(b, args, stderr)
 	default:
-		return usage(stderr, fmt.Sprintf("provider: unknown subcommand %q (expected add or remove)", args[1]))
+		return usage(stderr, fmt.Sprintf("provider: unknown subcommand %q (expected add, remove, enable, or disable)", args[1]))
 	}
 }
 
@@ -78,4 +90,51 @@ func providerRemove(b *ConfigBuilder, args []string, stderr io.Writer) error {
 	delete(b.section("providers"), id)
 	slog.Info("Provider removed in shell config", "provider", id)
 	return nil
+}
+
+func providerToggle(b *ConfigBuilder, args []string, stderr io.Writer) error {
+	verb := args[1]
+	if len(args) < 3 {
+		return usage(stderr, fmt.Sprintf("usage: provider %s <id>|all", verb))
+	}
+	arg := args[2]
+
+	ids := []string{arg}
+	if arg == "all" {
+		ids = allProviderIDs(b)
+	}
+
+	// Only set the disable flag so a toggle on a known provider keeps its
+	// catalog entry (models, credentials) instead of replacing it.
+	disabled := verb == "disable"
+	providers := b.section("providers")
+	for _, id := range ids {
+		p := childMap(providers, id)
+		p["disable"] = disabled
+	}
+	slog.Info("Provider enablement changed in shell config", "provider", arg, "disabled", disabled)
+	return nil
+}
+
+// allProviderIDs lists every provider known at this point in the script: the
+// built-in catalog shipped with this release (including Hyper, which is not
+// part of the embedded catalog), plus anything the script has defined so far.
+func allProviderIDs(b *ConfigBuilder) []string {
+	seen := make(map[string]bool)
+	var ids []string
+	add := func(id string) {
+		if !seen[id] {
+			seen[id] = true
+			ids = append(ids, id)
+		}
+	}
+	add(hyper.Name)
+	for _, p := range embedded.GetAll() {
+		add(string(p.ID))
+	}
+	for id := range b.section("providers") {
+		add(id)
+	}
+	slices.Sort(ids)
+	return ids
 }

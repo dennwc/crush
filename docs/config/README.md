@@ -137,6 +137,8 @@ Available Commands:
   add       Add or update a provider
   remove    Remove a provider and its custom models
   rm        Alias for remove
+  enable    Enable a provider (or all providers)
+  disable   Disable a provider (or all providers)
 ```
 
 #### `provider add`
@@ -187,6 +189,27 @@ Remove a provider and all custom models registered on it.
 Usage:
   provider remove <id>
   provider rm <id>
+```
+
+#### `provider enable` / `provider disable`
+
+Toggle a provider's disable flag without touching its other settings.
+Disabled providers are hidden from the model selection list.
+
+```text
+Usage:
+  provider enable <id>|all
+  provider disable <id>|all
+```
+
+With `all`, the toggle applies to every provider known at that point in the
+script: the built-in catalog shipped with this release (including Hyper),
+plus anything the script has defined so far. The last toggle in the script
+wins, so the common "use only one provider" pattern is:
+
+```bash
+provider disable all
+provider enable hyper
 ```
 
 ### model
